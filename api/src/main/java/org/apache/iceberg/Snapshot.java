@@ -173,7 +173,8 @@ public interface Snapshot extends Serializable {
   /**
    * Return the location of this snapshot's root manifest, or null if it does not have one.
    *
-   * <p>Root manifests are used by format version 4 and later in place of a manifest list.
+   * <p>Snapshots written at format version 4 and later track their manifests with a root manifest;
+   * earlier snapshots use a manifest list.
    *
    * @return the location of the root manifest for this Snapshot, or null
    */
