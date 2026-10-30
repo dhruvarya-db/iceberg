@@ -1193,7 +1193,7 @@ public class TestTableMetadata {
   }
 
   @Test
-  public void testV4RootManifestSnapshotRoundTripWithoutLocation() {
+  public void v4RootManifestSnapshotRoundTripWithoutLocation() {
     TableMetadata base =
         TableMetadata.newTableMetadata(
             TEST_SCHEMA,

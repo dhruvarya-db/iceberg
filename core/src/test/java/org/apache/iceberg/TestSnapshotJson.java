@@ -226,7 +226,7 @@ public class TestSnapshotJson {
   }
 
   @Test
-  public void testJsonConversionWithRootManifest() {
+  public void jsonConversionWithRootManifest() {
     String rootManifest = "/tmp/root-manifest.avro";
     Snapshot expected =
         new BaseSnapshot(
@@ -262,7 +262,7 @@ public class TestSnapshotJson {
   }
 
   @Test
-  public void testParseRootManifestWithoutManifestList() {
+  public void parseRootManifestWithoutManifestList() {
     String json =
         "{\n"
             + "  \"sequence-number\" : 2,\n"
@@ -288,7 +288,7 @@ public class TestSnapshotJson {
   }
 
   @Test
-  public void testParseRejectsManifestListAndRootManifest() {
+  public void parseRejectsManifestListAndRootManifest() {
     String json =
         "{\n"
             + "  \"snapshot-id\" : 3,\n"
@@ -305,7 +305,7 @@ public class TestSnapshotJson {
   }
 
   @Test
-  public void testRootManifestSnapshotRejectsManifestReads() {
+  public void rootManifestSnapshotRejectsManifestReads() {
     Snapshot snapshot =
         new BaseSnapshot(
             1,
@@ -333,7 +333,7 @@ public class TestSnapshotJson {
   }
 
   @Test
-  public void testSnapshotRequiresExactlyOneManifestPointer() {
+  public void snapshotRequiresExactlyOneManifestPointer() {
     assertThatThrownBy(
             () ->
                 new BaseSnapshot(
