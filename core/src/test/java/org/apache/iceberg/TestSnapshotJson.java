@@ -20,6 +20,7 @@ package org.apache.iceberg;
 
 import static org.apache.iceberg.Files.localInput;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.File;
 import java.io.IOException;
@@ -222,6 +223,152 @@ public class TestSnapshotJson {
     assertThat(snapshot.summary()).isEqualTo(expected.summary());
     assertThat(snapshot.schemaId()).isEqualTo(expected.schemaId());
     assertThat(snapshot.firstRowId()).isNull();
+  }
+
+  @Test
+  public void testJsonConversionWithRootManifest() {
+    String rootManifest = "/tmp/root-manifest.avro";
+    Snapshot expected =
+        new BaseSnapshot(
+            5,
+            23,
+            null,
+            System.currentTimeMillis(),
+            DataOperations.APPEND,
+            ImmutableMap.of("added-data-files", "2"),
+            1,
+            null,
+            rootManifest,
+            20L,
+            30L,
+            "key-1");
+
+    String json = SnapshotParser.toJson(expected);
+    assertThat(json).contains("\"root-manifest\" : \"/tmp/root-manifest.avro\"");
+    assertThat(json).doesNotContain("manifest-list").doesNotContain("\"manifests\"");
+
+    Snapshot snapshot = SnapshotParser.fromJson(json);
+    assertThat(snapshot.sequenceNumber()).isEqualTo(5);
+    assertThat(snapshot.snapshotId()).isEqualTo(23);
+    assertThat(snapshot.rootManifestLocation()).isEqualTo(rootManifest);
+    assertThat(snapshot.manifestListLocation()).isNull();
+    assertThat(snapshot.operation()).isEqualTo(DataOperations.APPEND);
+    assertThat(snapshot.summary()).isEqualTo(expected.summary());
+    assertThat(snapshot.schemaId()).isEqualTo(1);
+    assertThat(snapshot.firstRowId()).isEqualTo(20L);
+    assertThat(snapshot.addedRows()).isEqualTo(30L);
+    assertThat(snapshot.keyId()).isEqualTo("key-1");
+    assertThat(SnapshotParser.toJson(snapshot)).isEqualTo(json);
+  }
+
+  @Test
+  public void testParseRootManifestWithoutManifestList() {
+    String json =
+        "{\n"
+            + "  \"sequence-number\" : 2,\n"
+            + "  \"snapshot-id\" : 3,\n"
+            + "  \"timestamp-ms\" : 1700000000000,\n"
+            + "  \"summary\" : {\n"
+            + "    \"operation\" : \"delete\"\n"
+            + "  },\n"
+            + "  \"root-manifest\" : \"s3://bucket/root.avro\",\n"
+            + "  \"schema-id\" : 0,\n"
+            + "  \"first-row-id\" : 0,\n"
+            + "  \"added-rows\" : 0\n"
+            + "}";
+
+    Snapshot snapshot = SnapshotParser.fromJson(json);
+    assertThat(snapshot.sequenceNumber()).isEqualTo(2);
+    assertThat(snapshot.snapshotId()).isEqualTo(3);
+    assertThat(snapshot.operation()).isEqualTo(DataOperations.DELETE);
+    assertThat(snapshot.rootManifestLocation()).isEqualTo("s3://bucket/root.avro");
+    assertThat(snapshot.manifestListLocation()).isNull();
+    assertThat(snapshot.firstRowId()).isEqualTo(0L);
+    assertThat(snapshot.addedRows()).isEqualTo(0L);
+  }
+
+  @Test
+  public void testParseRejectsManifestListAndRootManifest() {
+    String json =
+        "{\n"
+            + "  \"snapshot-id\" : 3,\n"
+            + "  \"timestamp-ms\" : 1700000000000,\n"
+            + "  \"manifest-list\" : \"/tmp/snap-3.avro\",\n"
+            + "  \"root-manifest\" : \"/tmp/root.avro\",\n"
+            + "  \"first-row-id\" : 0,\n"
+            + "  \"added-rows\" : 0\n"
+            + "}";
+
+    assertThatThrownBy(() -> SnapshotParser.fromJson(json))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageStartingWith("Cannot parse snapshot with both manifest-list and root-manifest");
+  }
+
+  @Test
+  public void testRootManifestSnapshotRejectsManifestReads() {
+    Snapshot snapshot =
+        new BaseSnapshot(
+            1,
+            23,
+            null,
+            System.currentTimeMillis(),
+            DataOperations.APPEND,
+            null,
+            null,
+            null,
+            "/tmp/root.avro",
+            0L,
+            0L,
+            null);
+
+    assertThatThrownBy(() -> snapshot.allManifests(ops.io()))
+        .isInstanceOf(UnsupportedOperationException.class)
+        .hasMessage("Reading manifests from a root manifest is not supported yet: /tmp/root.avro");
+    assertThatThrownBy(() -> snapshot.dataManifests(ops.io()))
+        .isInstanceOf(UnsupportedOperationException.class)
+        .hasMessage("Reading manifests from a root manifest is not supported yet: /tmp/root.avro");
+    assertThatThrownBy(() -> snapshot.deleteManifests(ops.io()))
+        .isInstanceOf(UnsupportedOperationException.class)
+        .hasMessage("Reading manifests from a root manifest is not supported yet: /tmp/root.avro");
+  }
+
+  @Test
+  public void testSnapshotRequiresExactlyOneManifestPointer() {
+    assertThatThrownBy(
+            () ->
+                new BaseSnapshot(
+                    1,
+                    23,
+                    null,
+                    System.currentTimeMillis(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("Invalid snapshot: exactly one of manifest-list or root-manifest must be set");
+
+    assertThatThrownBy(
+            () ->
+                new BaseSnapshot(
+                    1,
+                    23,
+                    null,
+                    System.currentTimeMillis(),
+                    null,
+                    null,
+                    null,
+                    "/tmp/snap.avro",
+                    "/tmp/root.avro",
+                    null,
+                    null,
+                    null))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("Invalid snapshot: exactly one of manifest-list or root-manifest must be set");
   }
 
   private String createManifestListWithManifestFiles(long snapshotId, Long parentSnapshotId)
