@@ -115,6 +115,8 @@ import org.apache.iceberg.view.ViewRepresentation;
 
 public class CatalogHandlers {
   private static final Schema EMPTY_SCHEMA = new Schema();
+  // Mirrors TableMetadata.MIN_FORMAT_VERSION_OPTIONAL_LOCATION, which is package-private there.
+  private static final int MIN_FORMAT_VERSION_TABLE_LOCATION = 4;
   private static final String INITIAL_PAGE_TOKEN = "";
   private static final InMemoryPlanningState IN_MEMORY_PLANNING_STATE =
       InMemoryPlanningState.getInstance();
@@ -441,7 +443,7 @@ public class CatalogHandlers {
             location,
             properties);
 
-    return LoadTableResponse.builder().withTableMetadata(metadata).build();
+    return loadTableResponse(metadata);
   }
 
   public static LoadTableResponse createTable(
@@ -459,9 +461,7 @@ public class CatalogHandlers {
             .create();
 
     if (table instanceof BaseTable) {
-      return LoadTableResponse.builder()
-          .withTableMetadata(((BaseTable) table).operations().current())
-          .build();
+      return loadTableResponse(((BaseTable) table).operations().current());
     }
 
     throw new IllegalStateException("Cannot wrap catalog that does not produce BaseTable");
@@ -475,9 +475,7 @@ public class CatalogHandlers {
     Table table =
         catalog.registerTable(identifier, request.metadataLocation(), request.overwrite());
     if (table instanceof BaseTable) {
-      return LoadTableResponse.builder()
-          .withTableMetadata(((BaseTable) table).operations().current())
-          .build();
+      return loadTableResponse(((BaseTable) table).operations().current());
     }
 
     throw new IllegalStateException("Cannot wrap catalog that does not produce BaseTable");
@@ -500,6 +498,7 @@ public class CatalogHandlers {
 
     return ImmutableUnregisterTableResponse.builder()
         .metadataLocation(metadata.metadataFileLocation())
+        .tableLocation(tableLocation(metadata))
         .metadata(metadata)
         .build();
   }
@@ -541,7 +540,7 @@ public class CatalogHandlers {
           throw new IllegalArgumentException(String.format("Invalid snapshot mode: %s", mode));
       }
 
-      return LoadTableResponse.builder().withTableMetadata(metadata).build();
+      return loadTableResponse(metadata);
     } else if (table instanceof BaseMetadataTable) {
       // metadata tables are loaded on the client side, return NoSuchTableException for now
       throw new NoSuchTableException("Table does not exist: %s", ident);
@@ -575,11 +574,24 @@ public class CatalogHandlers {
       }
     }
 
-    return LoadTableResponse.builder().withTableMetadata(finalMetadata).build();
+    return loadTableResponse(finalMetadata);
   }
 
   public static void renameTable(Catalog catalog, RenameTableRequest request) {
     catalog.renameTable(request.source(), request.destination());
+  }
+
+  private static LoadTableResponse loadTableResponse(TableMetadata metadata) {
+    return LoadTableResponse.builder()
+        .withTableMetadata(metadata)
+        .withTableLocation(tableLocation(metadata))
+        .build();
+  }
+
+  private static String tableLocation(TableMetadata metadata) {
+    return metadata.formatVersion() >= MIN_FORMAT_VERSION_TABLE_LOCATION
+        ? metadata.location()
+        : null;
   }
 
   private static boolean isCreate(UpdateTableRequest request) {
