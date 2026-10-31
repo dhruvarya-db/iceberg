@@ -285,10 +285,7 @@ public class RESTCatalogAdapter extends BaseHTTPClient {
                 () -> {
                   LoadTableResponse response =
                       CatalogHandlers.createTable(catalog, namespace, request);
-                  responseHeaders.accept(
-                      ImmutableMap.of(
-                          HttpHeaders.ETAG,
-                          ETagProvider.of(response.metadataLocation(), defaultQueryParams())));
+                  setETagIfMetadataLocationPresent(responseHeaders, response);
                   return castResponse(responseType, response);
                 });
           }
@@ -323,6 +320,10 @@ public class RESTCatalogAdapter extends BaseHTTPClient {
                   catalog,
                   tableIdentFromPathVars(vars),
                   snapshotModeFromQueryParams(httpRequest.queryParameters()));
+
+          if (response.metadataLocation() == null) {
+            return castResponse(responseType, response);
+          }
 
           Optional<HTTPHeaders.HTTPHeader> ifNoneMatchHeader =
               httpRequest.headers().firstEntry(HttpHeaders.IF_NONE_MATCH);
@@ -385,10 +386,7 @@ public class RESTCatalogAdapter extends BaseHTTPClient {
                         namespaceFromPathVars(vars),
                         castRequest(RegisterTableRequest.class, body));
 
-                responseHeaders.accept(
-                    ImmutableMap.of(
-                        HttpHeaders.ETAG,
-                        ETagProvider.of(response.metadataLocation(), defaultQueryParams())));
+                setETagIfMetadataLocationPresent(responseHeaders, response);
 
                 return castResponse(responseType, response);
               });
@@ -415,10 +413,7 @@ public class RESTCatalogAdapter extends BaseHTTPClient {
                         tableIdentFromPathVars(vars),
                         castRequest(UpdateTableRequest.class, body));
 
-                responseHeaders.accept(
-                    ImmutableMap.of(
-                        HttpHeaders.ETAG,
-                        ETagProvider.of(response.metadataLocation(), defaultQueryParams())));
+                setETagIfMetadataLocationPresent(responseHeaders, response);
 
                 return castResponse(responseType, response);
               });
@@ -557,6 +552,16 @@ public class RESTCatalogAdapter extends BaseHTTPClient {
     return Map.of(
         RESTCatalogProperties.SNAPSHOTS_QUERY_PARAMETER,
         SnapshotMode.ALL.toString().toLowerCase(Locale.US));
+  }
+
+  private static void setETagIfMetadataLocationPresent(
+      Consumer<Map<String, String>> responseHeaders, LoadTableResponse response) {
+    if (response.metadataLocation() != null) {
+      responseHeaders.accept(
+          ImmutableMap.of(
+              HttpHeaders.ETAG,
+              ETagProvider.of(response.metadataLocation(), defaultQueryParams())));
+    }
   }
 
   /**

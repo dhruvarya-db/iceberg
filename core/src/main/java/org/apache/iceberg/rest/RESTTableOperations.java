@@ -46,6 +46,8 @@ import org.apache.iceberg.util.LocationUtil;
 
 class RESTTableOperations implements TableOperations {
   private static final String METADATA_FOLDER_NAME = "metadata";
+  // format v4 REST responses may omit metadata-location for catalog-managed tables (#17642)
+  private static final int MIN_FORMAT_VERSION_OPTIONAL_METADATA_LOCATION = 4;
 
   enum UpdateType {
     CREATE,
@@ -322,11 +324,18 @@ class RESTTableOperations implements TableOperations {
     // spec so it can be
     // safely ignored. there is no requirement to update config on refresh or commit.
     if (current == null
+        || hasOptionalMetadataLocation(response)
         || !Objects.equals(current.metadataFileLocation(), response.metadataLocation())) {
       this.current = checkUUID(current, response.tableMetadata());
     }
 
     return current;
+  }
+
+  private static boolean hasOptionalMetadataLocation(LoadTableResponse response) {
+    return response.metadataLocation() == null
+        && response.tableMetadata().formatVersion()
+            >= MIN_FORMAT_VERSION_OPTIONAL_METADATA_LOCATION;
   }
 
   private static TableMetadata checkUUID(TableMetadata currentMetadata, TableMetadata newMetadata) {
