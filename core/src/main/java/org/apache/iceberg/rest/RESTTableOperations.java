@@ -55,6 +55,7 @@ class RESTTableOperations implements TableOperations {
 
   private final RESTClient client;
   private final String path;
+  private final String loadPath;
   private final Supplier<Map<String, String>> readHeaders;
   private final Supplier<Map<String, String>> mutationHeaders;
   private final FileIO io;
@@ -75,6 +76,7 @@ class RESTTableOperations implements TableOperations {
     this(
         client,
         path,
+        path,
         headers,
         headers,
         io,
@@ -97,6 +99,7 @@ class RESTTableOperations implements TableOperations {
     this(
         client,
         path,
+        path,
         headers,
         headers,
         io,
@@ -110,6 +113,7 @@ class RESTTableOperations implements TableOperations {
   RESTTableOperations(
       RESTClient client,
       String path,
+      String loadPath,
       Supplier<Map<String, String>> readHeaders,
       Supplier<Map<String, String>> mutationHeaders,
       FileIO io,
@@ -119,6 +123,7 @@ class RESTTableOperations implements TableOperations {
     this(
         client,
         path,
+        loadPath,
         readHeaders,
         mutationHeaders,
         io,
@@ -132,6 +137,7 @@ class RESTTableOperations implements TableOperations {
   RESTTableOperations(
       RESTClient client,
       String path,
+      String loadPath,
       Supplier<Map<String, String>> readHeaders,
       Supplier<Map<String, String>> mutationHeaders,
       FileIO io,
@@ -142,6 +148,7 @@ class RESTTableOperations implements TableOperations {
       Map<String, String> readQueryParams) {
     this.client = client;
     this.path = path;
+    this.loadPath = loadPath;
     this.readHeaders = readHeaders;
     this.mutationHeaders = mutationHeaders;
     this.io = io;
@@ -164,10 +171,13 @@ class RESTTableOperations implements TableOperations {
 
   @Override
   public TableMetadata refresh() {
-    Endpoint.check(endpoints, Endpoint.V1_LOAD_TABLE);
+    if (!endpoints.contains(Endpoint.V2_LOAD_TABLE)) {
+      Endpoint.check(endpoints, Endpoint.V1_LOAD_TABLE);
+    }
+
     return updateCurrentMetadata(
         client.get(
-            path,
+            loadPath,
             readQueryParams,
             LoadTableResponse.class,
             readHeaders,
