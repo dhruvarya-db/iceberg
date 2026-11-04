@@ -1193,6 +1193,46 @@ public class TestTableMetadata {
   }
 
   @Test
+  public void v4RootManifestSnapshotRoundTripWithoutLocation() {
+    TableMetadata base =
+        TableMetadata.newTableMetadata(
+            TEST_SCHEMA,
+            PartitionSpec.unpartitioned(),
+            SortOrder.unsorted(),
+            null,
+            ImmutableMap.of(),
+            4);
+    Snapshot snapshot =
+        new BaseSnapshot(
+            1L,
+            1L,
+            null,
+            System.currentTimeMillis(),
+            DataOperations.APPEND,
+            ImmutableMap.of("added-data-files", "1"),
+            base.currentSchemaId(),
+            null,
+            "/tmp/root-manifest.avro",
+            0L,
+            0L,
+            null);
+    TableMetadata metadata =
+        TableMetadata.buildFrom(base).setBranchSnapshot(snapshot, SnapshotRef.MAIN_BRANCH).build();
+
+    String json = TableMetadataParser.toJson(metadata);
+    assertThat(json).doesNotContain("\"location\"").doesNotContain("\"manifest-list\"");
+    assertThat(json).doesNotContain("\"manifests\"").contains("\"root-manifest\"");
+
+    TableMetadata parsed = TableMetadataParser.fromJson(json);
+    assertThat(parsed.location()).isNull();
+    Snapshot parsedSnapshot = parsed.snapshot(snapshot.snapshotId());
+    assertThat(parsedSnapshot.rootManifestLocation()).isEqualTo("/tmp/root-manifest.avro");
+    assertThat(parsedSnapshot.manifestListLocation()).isNull();
+    assertThat(parsed.currentSnapshot().snapshotId()).isEqualTo(snapshot.snapshotId());
+    assertThat(TableMetadataParser.toJson(parsed)).isEqualTo(json);
+  }
+
+  @Test
   public void testV4LocationMustBeAbsolute() {
     assertThatThrownBy(
             () ->

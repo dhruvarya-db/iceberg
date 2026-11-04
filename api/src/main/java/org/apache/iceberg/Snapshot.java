@@ -171,6 +171,18 @@ public interface Snapshot extends Serializable {
   String manifestListLocation();
 
   /**
+   * Return the location of this snapshot's root manifest, or null if it does not have one.
+   *
+   * <p>Snapshots written at format version 4 and later track their manifests with a root manifest;
+   * earlier snapshots use a manifest list.
+   *
+   * @return the location of the root manifest for this Snapshot, or null
+   */
+  default String rootManifestLocation() {
+    return null;
+  }
+
+  /**
    * Return the id of the schema used when this snapshot was created, or null if this information is
    * not available.
    *

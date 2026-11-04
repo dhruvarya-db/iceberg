@@ -28,10 +28,14 @@ import static org.mockito.ArgumentMatchers.eq;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.MetadataUpdate;
+import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.SnapshotParser;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableMetadataParser;
+import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
@@ -99,6 +103,38 @@ class TestRESTCatalogFormatV4 extends TestBaseWithRESTServer {
     assertThat(updates).isNotEmpty().noneMatch(MetadataUpdate.SetLocation.class::isInstance);
     assertThat(backendCatalog.loadTable(TBL).location()).isEqualTo(TBL_LOCATION);
     assertThat(backendCatalog.loadTable(TBL).currentSnapshot()).isNotNull();
+  }
+
+  @Test
+  void loadAndCommitTableWithRootManifestSnapshot() {
+    backendCatalog.createNamespace(NS);
+    backendCatalog
+        .buildTable(TBL, SCHEMA)
+        .withLocation(TBL_LOCATION)
+        .withProperty(TableProperties.FORMAT_VERSION, "4")
+        .create();
+    String rootManifest = TBL_LOCATION + "/metadata/snap-1-root.parquet";
+    TableOperations backendOps = ((BaseTable) backendCatalog.loadTable(TBL)).operations();
+    TableMetadata base = backendOps.current();
+    Snapshot snapshot =
+        SnapshotParser.fromJson(
+            "{\"sequence-number\":1,\"snapshot-id\":1,\"timestamp-ms\":"
+                + (base.lastUpdatedMillis() + 1)
+                + ",\"summary\":{\"operation\":\"append\"},\"root-manifest\":\""
+                + rootManifest
+                + "\",\"schema-id\":0,\"first-row-id\":0,\"added-rows\":0}");
+    backendOps.commit(
+        base, TableMetadata.buildFrom(base).setBranchSnapshot(snapshot, "main").build());
+
+    Table loaded = restCatalog.loadTable(TBL);
+    assertThat(loaded.currentSnapshot().rootManifestLocation()).isEqualTo(rootManifest);
+    assertThat(loaded.currentSnapshot().manifestListLocation()).isNull();
+
+    loaded.updateProperties().set("k", "v").commit();
+    loaded.refresh();
+
+    assertThat(loaded.properties()).containsEntry("k", "v");
+    assertThat(loaded.currentSnapshot().rootManifestLocation()).isEqualTo(rootManifest);
   }
 
   private static TableMetadata withoutLocation(TableMetadata metadata) {
